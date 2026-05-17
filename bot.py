@@ -1,8 +1,8 @@
 import requests,hmac,hashlib,time,json
 from datetime import date
 
-KEY="cJUDaAqjUo9988uBctP0vJjxSnYYRD"
-SECRET="jaVfMa4T9CtLKxqkebOovACptsThEMVf92FSdsZS6TcDOT8XltSakfooQeP8"
+KEY="9ihv6wjSmxx5wbpG5BwjeV5aY8at9r"
+SECRET="qWGvfU1SWHDrOoEKMI1JWdBbWsg6CMx3iYBvu1icXwutzuUaN1tq64VVHKS9"
 URL="https://cdn-ind.testnet.deltaex.org"
 MAX_SL=3
 sl_count=0
