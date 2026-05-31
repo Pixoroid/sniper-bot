@@ -2,7 +2,7 @@ import requests, hmac, hashlib, time, json, os
 from datetime import date, datetime
 import pytz
 
-KEY    = (""afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"")
+KEY    = ("afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ")
 SECRET = ("0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c")
 URL    = "https://cdn-ind.testnet.deltaex.org"
 
