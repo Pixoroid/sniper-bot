@@ -1,11 +1,8 @@
 import requests, hmac, hashlib, time, json, os
 from datetime import date, datetime
-import pytz
-
 KEY    = ("afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ")
 SECRET = ("0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c")
 URL    = "https://cdn-ind.testnet.deltaex.org"
-
 LEVERAGE   = 5
 MAX_SL     = 3
 TP1_PTS    = 300
