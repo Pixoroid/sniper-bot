@@ -13,8 +13,6 @@ INR_RATE           = 85
 MAX_SL             = 3
 MAX_CONSECUTIVE_SL = 2
 DAILY_LOSS_LIMIT   = 200
-
-# ATR Trail
 ATR_TRAIL_MULT     = 2.0
 ATR_SL_MULT        = 1.5
 MIN_SL_PTS         = 150
@@ -106,7 +104,8 @@ def get_actual_entry(pid):
         print(f"❌ Entry:{e}")
     return None
 
-def candles(resolution="15m", limit_hours=10):
+# ✅ FIX — 6hr data fresh candles
+def candles(resolution="15m", limit_hours=6):
     try:
         end   = int(time.time())
         start = end - (limit_hours * 3600)
@@ -175,15 +174,16 @@ def find_divergence(candle_data, live_price):
     highs  = [float(c["high"])  for c in candle_data]
     lows   = [float(c["low"])   for c in candle_data]
 
-    # Data freshness check
+    # ✅ FIX — Stale check 1500 pts
     last_close = closes[-1]
-    if abs(last_close - live_price) > 500:
-        print(f"⚠️ Stale Data! "
-              f"Last:{last_close} "
-              f"Live:{live_price} — SKIP")
+    if abs(last_close - live_price) > 1500:
+        print(f"⚠️ Stale! "
+              f"Last:{last_close:.0f} "
+              f"Live:{live_price:.0f} "
+              f"Diff:{abs(last_close-live_price):.0f}")
         return "HOLD"
 
-    # RSI values calculate करो
+    # RSI values
     rsi_values = []
     for i in range(14, len(closes)):
         rsi_values.append(
@@ -194,15 +194,13 @@ def find_divergence(candle_data, live_price):
 
     current_rsi = rsi_values[-1]
 
-    # ── पिछले Swing Highs/Lows ──────────────
-    # पिछले 20 candles में
-    lookback = 20
-    recent_closes = closes[-lookback:]
+    # पिछले 20 candles
+    lookback      = 20
     recent_highs  = highs[-lookback:]
     recent_lows   = lows[-lookback:]
     recent_rsi    = rsi_values[-lookback:]
 
-    # Price Swing Lows ढूंढो (BUY के लिए)
+    # Swing Lows — BUY के लिए
     price_lows = []
     rsi_lows   = []
     for i in range(1, len(recent_lows)-1):
@@ -210,10 +208,11 @@ def find_divergence(candle_data, live_price):
                 and recent_lows[i] < recent_lows[i+1]):
             price_lows.append(
                 (i, recent_lows[i]))
-            rsi_lows.append(
-                (i, recent_rsi[i]))
+            if i < len(recent_rsi):
+                rsi_lows.append(
+                    (i, recent_rsi[i]))
 
-    # Price Swing Highs ढूंढो (SELL के लिए)
+    # Swing Highs — SELL के लिए
     price_highs = []
     rsi_highs   = []
     for i in range(1, len(recent_highs)-1):
@@ -221,57 +220,54 @@ def find_divergence(candle_data, live_price):
                 and recent_highs[i] > recent_highs[i+1]):
             price_highs.append(
                 (i, recent_highs[i]))
-            rsi_highs.append(
-                (i, recent_rsi[i]))
+            if i < len(recent_rsi):
+                rsi_highs.append(
+                    (i, recent_rsi[i]))
 
     print(f"📊 RSI:{current_rsi:.1f} "
-          f"Lows:{len(price_lows)} "
-          f"Highs:{len(price_highs)} "
-          f"Price:{live_price}")
+          f"SwingLows:{len(price_lows)} "
+          f"SwingHighs:{len(price_highs)} "
+          f"Live:{live_price:.0f}")
 
     # ── BULLISH DIVERGENCE (BUY) ─────────────
-    # Price: Lower Low
-    # RSI:   Higher Low
     if len(price_lows) >= 2 and len(rsi_lows) >= 2:
         p_low1 = price_lows[-2][1]
         p_low2 = price_lows[-1][1]
         r_low1 = rsi_lows[-2][1]
         r_low2 = rsi_lows[-1][1]
 
-        bullish_div = (
-            p_low2 < p_low1      # Price Lower Low
-            and r_low2 > r_low1  # RSI Higher Low
-            and current_rsi < 45 # Oversold zone
+        bullish = (
+            p_low2 < p_low1       # Price Lower Low
+            and r_low2 > r_low1   # RSI Higher Low
+            and current_rsi < 45  # Oversold
         )
 
-        if bullish_div:
-            print(f"🟢 BULLISH DIVERGENCE! "
-                  f"PriceLow:{p_low1:.0f}→{p_low2:.0f} "
-                  f"RSILow:{r_low1:.1f}→{r_low2:.1f}")
+        if bullish:
+            print(f"🟢 BULLISH DIV! "
+                  f"P:{p_low1:.0f}→{p_low2:.0f} "
+                  f"RSI:{r_low1:.1f}→{r_low2:.1f}")
             return "BUY"
 
     # ── BEARISH DIVERGENCE (SELL) ────────────
-    # Price: Higher High
-    # RSI:   Lower High
     if len(price_highs) >= 2 and len(rsi_highs) >= 2:
         p_hi1 = price_highs[-2][1]
         p_hi2 = price_highs[-1][1]
         r_hi1 = rsi_highs[-2][1]
         r_hi2 = rsi_highs[-1][1]
 
-        bearish_div = (
-            p_hi2 > p_hi1        # Price Higher High
-            and r_hi2 < r_hi1    # RSI Lower High
-            and current_rsi > 55 # Overbought zone
+        bearish = (
+            p_hi2 > p_hi1         # Price Higher High
+            and r_hi2 < r_hi1     # RSI Lower High
+            and current_rsi > 55  # Overbought
         )
 
-        if bearish_div:
-            print(f"🔴 BEARISH DIVERGENCE! "
-                  f"PriceHigh:{p_hi1:.0f}→{p_hi2:.0f} "
-                  f"RSIHigh:{r_hi1:.1f}→{r_hi2:.1f}")
+        if bearish:
+            print(f"🔴 BEARISH DIV! "
+                  f"P:{p_hi1:.0f}→{p_hi2:.0f} "
+                  f"RSI:{r_hi1:.1f}→{r_hi2:.1f}")
             return "SELL"
 
-    print(f"⏳ No Divergence | RSI:{current_rsi:.1f}")
+    print(f"⏳ No Divergence RSI:{current_rsi:.1f}")
     return "HOLD"
 
 # ══════════════════════════════════════════
@@ -338,7 +334,7 @@ def trail_monitor(pid, side, entry, size, init_sl):
     trail_hits = 0
 
     print(f"🔄 Entry:{entry} SL:{current_sl}")
-    print(f"♾️  No TP — ATR Trail Only")
+    print(f"♾️  No TP — ATR Trail")
 
     for _ in range(5000):
         time.sleep(60)
@@ -373,7 +369,6 @@ def trail_monitor(pid, side, entry, size, init_sl):
         if side == "buy":
             if cp > best_price:
                 best_price = cp
-
             new_sl = round(
                 best_price - trail_dist, 1)
             if new_sl > current_sl:
@@ -409,7 +404,6 @@ def trail_monitor(pid, side, entry, size, init_sl):
         else:
             if cp < best_price:
                 best_price = cp
-
             new_sl = round(
                 best_price + trail_dist, 1)
             if new_sl < current_sl:
@@ -512,12 +506,12 @@ def run():
 
     cooldown = 0
 
-    print("🚀 Sniper Bot v14.0")
-    print("📊 Leading: RSI Divergence")
-    print("♾️  No TP | ATR Trail")
-    print(f"🛡️ Daily Loss: ₹{DAILY_LOSS_LIMIT}")
-    print(f"⚙️  Max SL:{MAX_SL} | "
-          f"Consecutive:{MAX_CONSECUTIVE_SL}")
+    print("🚀 Sniper Bot v15.0")
+    print("📊 RSI Divergence | ATR Trail | No TP")
+    print(f"✅ Real: india.delta.exchange")
+    print(f"🛡️ Loss:₹{DAILY_LOSS_LIMIT} "
+          f"MaxSL:{MAX_SL} "
+          f"ConsSL:{MAX_CONSECUTIVE_SL}")
 
     while True:
 
@@ -530,8 +524,7 @@ def run():
             print("🌅 नया दिन! Reset.")
 
         if daily_pnl_inr <= -DAILY_LOSS_LIMIT:
-            print(f"🛑 Loss Limit! "
-                  f"₹{daily_pnl_inr:.0f} बंद")
+            print(f"🛑 Loss! ₹{daily_pnl_inr:.0f} बंद")
             time.sleep(3600)
             continue
 
@@ -575,3 +568,4 @@ def run():
         time.sleep(300)
 
 run()
+                          
