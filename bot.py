@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone, timedelta
 KEY    = "afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"
 SECRET = "0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c"
 URL    = "https://api.india.delta.exchange"
-
+     
 LEVERAGE           = 5
 INR_RATE           = 85
 MAX_SL             = 3
@@ -94,7 +94,6 @@ def get_actual_entry(pid):
         print(f"❌ Entry:{e}")
     return None
 
-# ✅ 12hr — enough candles
 def candles(resolution="15m", limit_hours=12):
     try:
         end   = int(time.time())
@@ -149,7 +148,8 @@ def calc_atr(candle_data, n=14):
         a = t * k + a * (1 - k)
     return round(a, 1)
 
-def find_divergence(candle_data, live_price):
+# ✅ Stale check हटाया — Normal difference है
+def find_divergence(candle_data):
     if len(candle_data) < 20:
         print("⚠️ कम candles!")
         return "HOLD"
@@ -157,14 +157,6 @@ def find_divergence(candle_data, live_price):
     closes = [float(c["close"]) for c in candle_data]
     highs  = [float(c["high"])  for c in candle_data]
     lows   = [float(c["low"])   for c in candle_data]
-
-    last_close = closes[-1]
-    if abs(last_close - live_price) > 1500:
-        print(f"⚠️ Stale! "
-              f"Last:{last_close:.0f} "
-              f"Live:{live_price:.0f} "
-              f"Diff:{abs(last_close-live_price):.0f}")
-        return "HOLD"
 
     rsi_values = []
     for i in range(14, len(closes)):
@@ -199,9 +191,9 @@ def find_divergence(candle_data, live_price):
 
     print(f"📊 RSI:{current_rsi:.1f} "
           f"Lows:{len(price_lows)} "
-          f"Highs:{len(price_highs)} "
-          f"Live:{live_price:.0f}")
+          f"Highs:{len(price_highs)}")
 
+    # ✅ BULLISH DIVERGENCE — BUY
     if len(price_lows) >= 2 and len(rsi_lows) >= 2:
         p_low1 = price_lows[-2][1]
         p_low2 = price_lows[-1][1]
@@ -215,6 +207,7 @@ def find_divergence(candle_data, live_price):
                   f"RSI:{r_low1:.1f}→{r_low2:.1f}")
             return "BUY"
 
+    # ✅ BEARISH DIVERGENCE — SELL
     if len(price_highs) >= 2 and len(rsi_highs) >= 2:
         p_hi1 = price_highs[-2][1]
         p_hi2 = price_highs[-1][1]
@@ -451,7 +444,7 @@ def run():
 
     cooldown = 0
 
-    print("🚀 Sniper Bot v15.1")
+    print("🚀 Sniper Bot v15.2")
     print("📊 RSI Divergence | ATR Trail | No TP")
     print(f"✅ Real: india.delta.exchange")
     print(f"🛡️ Loss:₹{DAILY_LOSS_LIMIT} "
@@ -494,7 +487,7 @@ def run():
         c  = candles()
 
         if cp and c and len(c) >= 20:
-            s = find_divergence(c, cp)
+            s = find_divergence(c)
             print(f"💰 Price:{cp} "
                   f"Signal:{s} "
                   f"SL:{sl_count}/{MAX_SL} "
@@ -512,7 +505,5 @@ def run():
 
         time.sleep(300)
 
-run()                                                
-                
-    
-                          
+run()
+                            
