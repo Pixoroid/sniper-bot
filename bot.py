@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone, timedelta
 KEY    = "afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"
 SECRET = "0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c"
 URL    = "https://api.india.delta.exchange"
-
+        
 LEVERAGE           = 5
 INR_RATE           = 85
 MAX_SL             = 3
@@ -20,6 +20,18 @@ consecutive_sl = 0
 daily_pnl_inr  = 0.0
 today          = date.today()
 last_signal    = "HOLD"
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot Running!")
+    def log_message(self, *args):
+        pass
+
+def keep_alive():
+    server = HTTPServer(("0.0.0.0", 8080), Handler)
+    server.serve_forever()
 
 def hdrs(m, p, b=""):
     t = str(int(time.time()))
@@ -44,6 +56,7 @@ def price():
         print(f"❌ Price:{e}")
         return None
 
+# ✅ INR Balance Fix
 def get_balance():
     try:
         h    = hdrs("GET", "/v2/wallet/balances", "")
@@ -51,32 +64,57 @@ def get_balance():
                    URL + "/v2/wallet/balances",
                    headers=h, timeout=10)
         data = r.json().get("result", [])
+
+        # सब assets print करो
         for x in data:
             print(f"💼 {x.get('asset_symbol')}:"
                   f"{x.get('available_balance')}")
+
+        # USD/USDT/INR ढूंढो
         for x in data:
             sym = x.get("asset_symbol", "")
-            if sym in ["USD", "USDT", "USDC", "BTC"]:
-                bal = float(
-                    x.get("available_balance", 0))
-                print(f"✅ Balance:${bal}")
+            bal = float(
+                x.get("available_balance", 0))
+
+            if sym == "INR" and bal > 0:
+                # INR को USD में convert
+                usd = round(bal / INR_RATE, 4)
+                print(f"✅ INR:₹{bal:.0f} = ${usd}")
+                return usd
+
+            if sym in ["USD", "USDT", "USDC"] \
+                    and bal > 0:
+                print(f"✅ {sym}:${bal}")
                 return bal
+
+        # BTC balance
+        for x in data:
+            sym = x.get("asset_symbol", "")
+            bal = float(
+                x.get("available_balance", 0))
+            if sym == "BTC" and bal > 0:
+                cp  = price() or 60000
+                usd = round(bal * cp, 4)
+                print(f"✅ BTC:{bal} = ${usd}")
+                return usd
+
+        # कोई नहीं मिला
         if data:
-            return float(
+            bal = float(
                 data[0].get("available_balance", 0))
+            print(f"💼 First asset bal:{bal}")
+            return bal
+
     except Exception as e:
         print(f"❌ Balance:{e}")
-    return None
+    return 0.0
 
-def calc_size(btc_price):
-    balance = get_balance()
-    if not balance or balance <= 0:
-        print("❌ Balance नहीं!")
-        return None
-    position_usd = balance * LEVERAGE
+def calc_size(btc_price, balance_usd):
+    position_usd = balance_usd * LEVERAGE
     size         = round(position_usd / btc_price, 6)
     size         = max(size, 0.001)
-    print(f"💰 ${balance:.4f}×{LEVERAGE}x→{size} BTC")
+    print(f"💰 ${balance_usd:.4f}×{LEVERAGE}x"
+          f"→{size} BTC")
     return size
 
 def get_actual_entry(pid):
@@ -156,7 +194,6 @@ def volume_ok(candle_data, multiplier=1.2):
     print(f"📊 Vol:{cur:.0f} Avg:{avg:.0f} OK:{ok}")
     return ok
 
-# ✅ RSI Divergence + Trend Mode
 def find_divergence(candle_data):
     if len(candle_data) < 20:
         print("⚠️ कम candles!")
@@ -174,12 +211,10 @@ def find_divergence(candle_data):
     if len(rsi_values) < 10:
         return "HOLD"
 
-    current_rsi  = rsi_values[-1]
-    vol_good     = volume_ok(candle_data)
-
-    # Candle color
-    green = closes[-1] > opens[-1]
-    red   = closes[-1] < opens[-1]
+    current_rsi = rsi_values[-1]
+    vol_good    = volume_ok(candle_data)
+    green       = closes[-1] > opens[-1]
+    red         = closes[-1] < opens[-1]
 
     lookback     = 20
     recent_highs = highs[-lookback:]
@@ -207,68 +242,49 @@ def find_divergence(candle_data):
     print(f"📊 RSI:{current_rsi:.1f} "
           f"Lows:{len(price_lows)} "
           f"Highs:{len(price_highs)} "
-          f"Vol:{vol_good} "
-          f"G:{green} R:{red}")
+          f"Vol:{vol_good} G:{green} R:{red}")
 
-    # ✅ BULLISH DIVERGENCE — BUY
     if len(price_lows) >= 2 and len(rsi_lows) >= 2:
-        p_low1 = price_lows[-2][1]
-        p_low2 = price_lows[-1][1]
-        r_low1 = rsi_lows[-2][1]
-        r_low2 = rsi_lows[-1][1]
-
-        # Swing size minimum 500 pts
+        p_low1     = price_lows[-2][1]
+        p_low2     = price_lows[-1][1]
+        r_low1     = rsi_lows[-2][1]
+        r_low2     = rsi_lows[-1][1]
         swing_size = abs(p_low1 - p_low2)
-
         if (p_low2 < p_low1
                 and r_low2 > r_low1
                 and current_rsi < 45
-                and vol_good
-                and green
+                and vol_good and green
                 and swing_size >= 500):
             print(f"🟢 BULLISH DIV! "
-                  f"P:{p_low1:.0f}→{p_low2:.0f} "
-                  f"RSI:{r_low1:.1f}→{r_low2:.1f} "
                   f"Swing:{swing_size:.0f}")
             return "BUY"
 
-    # ✅ BEARISH DIVERGENCE — SELL
     if len(price_highs) >= 2 and len(rsi_highs) >= 2:
-        p_hi1 = price_highs[-2][1]
-        p_hi2 = price_highs[-1][1]
-        r_hi1 = rsi_highs[-2][1]
-        r_hi2 = rsi_highs[-1][1]
-
+        p_hi1      = price_highs[-2][1]
+        p_hi2      = price_highs[-1][1]
+        r_hi1      = rsi_highs[-2][1]
+        r_hi2      = rsi_highs[-1][1]
         swing_size = abs(p_hi2 - p_hi1)
-
         if (p_hi2 > p_hi1
                 and r_hi2 < r_hi1
                 and current_rsi > 55
-                and vol_good
-                and red
+                and vol_good and red
                 and swing_size >= 500):
             print(f"🔴 BEARISH DIV! "
-                  f"P:{p_hi1:.0f}→{p_hi2:.0f} "
-                  f"RSI:{r_hi1:.1f}→{r_hi2:.1f} "
                   f"Swing:{swing_size:.0f}")
             return "SELL"
 
-    # ✅ TREND MODE — Strong move पकड़ो
     curr = closes[-1]
     prev = closes[-5] if len(closes) >= 5 \
            else closes[0]
     move = (prev - curr) / prev * 100
 
     if move > 1.0 and current_rsi < 50 and red:
-        print(f"🔴 TREND SELL! "
-              f"Move:{move:.1f}% "
-              f"RSI:{current_rsi:.1f}")
+        print(f"🔴 TREND SELL! Move:{move:.1f}%")
         return "SELL"
 
     if move < -1.0 and current_rsi > 50 and green:
-        print(f"🟢 TREND BUY! "
-              f"Move:{move:.1f}% "
-              f"RSI:{current_rsi:.1f}")
+        print(f"🟢 TREND BUY! Move:{move:.1f}%")
         return "BUY"
 
     print(f"⏳ No Signal RSI:{current_rsi:.1f} "
@@ -323,17 +339,42 @@ def place_order(pid, side, order_type, size,
                       timeout=10)
     return r.json()
 
-def trail_monitor(pid, side, entry, size, init_sl):
+def trade_monitor(pid, side, entry, sl,
+                  size, has_balance):
     global sl_count, consecutive_sl
     global daily_pnl_inr, last_signal
 
     close_side = "sell" if side == "buy" else "buy"
-    current_sl = init_sl
+    current_sl = sl
     best_price = entry
     trail_hits = 0
+    sl_dist    = abs(entry - sl)
 
-    print(f"🔄 Entry:{entry} SL:{current_sl}")
-    print(f"♾️  No TP — ATR Trail")
+    tp1 = round(entry + 300, 1) if side == "buy" \
+          else round(entry - 300, 1)
+    tp2 = round(entry + 600, 1) if side == "buy" \
+          else round(entry - 600, 1)
+    tp3 = round(entry + 900, 1) if side == "buy" \
+          else round(entry - 900, 1)
+
+    tp1_hit = False
+    tp2_hit = False
+    tp3_hit = False
+
+    mode = "💰 REAL" if has_balance else "👁️ TRACKING"
+
+    print(f"\n{'='*45}")
+    print(f"{mode} TRADE")
+    print(f"{'='*45}")
+    print(f"📌 Side:   {side.upper()}")
+    print(f"💲 Entry:  {entry}")
+    print(f"🛡️  SL:     {current_sl} "
+          f"({sl_dist:.0f} pts)")
+    print(f"🎯 TP1:    {tp1} (+300) R:R 1:1")
+    print(f"🎯 TP2:    {tp2} (+600) R:R 1:2")
+    print(f"🎯 TP3:    {tp3} (+900) R:R 1:3")
+    print(f"♾️  Trail:  ATR×{ATR_TRAIL_MULT}")
+    print(f"{'='*45}\n")
 
     for _ in range(5000):
         time.sleep(60)
@@ -354,225 +395,194 @@ def trail_monitor(pid, side, entry, size, init_sl):
         profit_pts = round(cp - entry, 1) \
                      if side == "buy" \
                      else round(entry - cp, 1)
-        profit_inr = round(
-            profit_pts * size * INR_RATE, 1)
+        rr = round(profit_pts / sl_dist, 2) \
+             if sl_dist > 0 else 0
 
-        print(f"💹 CP:{cp} "
-              f"P&L:{profit_pts:+.0f}pts "
-              f"₹{profit_inr:+.0f} | "
-              f"SL:{current_sl} | "
-              f"Trail:{trail_dist} | "
-              f"Daily:₹{daily_pnl_inr:+.0f}")
+        print(f"{'💰' if has_balance else '👁️'} "
+              f"CP:{cp:.0f} | "
+              f"P&L:{profit_pts:+.0f}pts | "
+              f"R:R 1:{rr:.1f} | "
+              f"SL:{current_sl:.0f} | "
+              f"Trail:{trail_dist:.0f}")
 
         if side == "buy":
-            if cp > best_price:
-                best_price = cp
-            new_sl = round(best_price - trail_dist, 1)
-            if new_sl > current_sl:
-                old_sl     = current_sl
-                current_sl = new_sl
-                trail_hits += 1
-                cancel_all_orders(pid)
-                place_order(pid, close_side,
-                            "limit_order", size,
-                            current_sl, current_sl,
-                            "stop_loss_order")
-                print(f"📈 Trail#{trail_hits} "
-                      f"SL:{old_sl}→{current_sl}")
+
+            if not tp1_hit and cp >= tp1:
+                tp1_hit    = True
+                current_sl = entry + 10
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'✅'*8}")
+                print(f"TP1 HIT! +300pts R:R 1:1")
+                print(f"SL→Breakeven:{current_sl:.0f}")
+                print(f"{'✅'*8}\n")
+
+            elif tp1_hit and not tp2_hit \
+                    and cp >= tp2:
+                tp2_hit    = True
+                current_sl = entry + 300
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'🚀'*8}")
+                print(f"TP2 HIT! +600pts R:R 1:2")
+                print(f"SL→+300:{current_sl:.0f}")
+                print(f"{'🚀'*8}\n")
+
+            elif tp2_hit and not tp3_hit \
+                    and cp >= tp3:
+                tp3_hit    = True
+                current_sl = entry + 600
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'🔥'*8}")
+                print(f"TP3 HIT! +900pts R:R 1:3")
+                print(f"SL→+600:{current_sl:.0f}")
+                print(f"{'🔥'*8}\n")
+
+            elif tp3_hit:
+                if cp > best_price:
+                    best_price = cp
+                new_sl = round(
+                    best_price - trail_dist, 1)
+                if new_sl > current_sl:
+                    old_sl     = current_sl
+                    current_sl = new_sl
+                    trail_hits += 1
+                    if has_balance and pid:
+                        cancel_all_orders(pid)
+                        place_order(pid, close_side,
+                                    "limit_order", size,
+                                    current_sl, current_sl,
+                                    "stop_loss_order")
+                    print(f"🚀 Trail#{trail_hits} "
+                          f"SL:{old_sl:.0f}→"
+                          f"{current_sl:.0f}")
 
             if cp <= current_sl:
-                cancel_all_orders(pid)
-                final_pnl = round(
-                    (current_sl - entry)
-                    * size * INR_RATE, 1)
-                daily_pnl_inr += final_pnl
-                if profit_pts > 0:
-                    print(f"🎯 Profit! "
-                          f"+{profit_pts:.0f}pts "
-                          f"₹{final_pnl:+.0f}🔥")
-                    consecutive_sl = 0
-                else:
-                    print(f"🛑 SL! ₹{final_pnl:.0f}")
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                final_pts = round(
+                    current_sl - entry, 1)
+                daily_pnl_inr += final_pts * 0.001
+                rr_f = round(
+                    final_pts / sl_dist, 2) \
+                    if sl_dist > 0 else 0
+                print(f"\n{'='*45}")
+                print(f"{'🎯 PROFIT EXIT!' if final_pts > 0 else '🛑 SL HIT!'} {mode}")
+                print(f"{'='*45}")
+                print(f"📌 Side:   BUY")
+                print(f"💲 Entry:  {entry}")
+                print(f"💲 Exit:   {current_sl:.0f}")
+                print(f"📈 P&L:    {final_pts:+.0f} pts")
+                print(f"📊 R:R:    1:{rr_f:.1f}")
+                print(f"✅ TP1:    {'HIT ✅' if tp1_hit else 'Miss ❌'}")
+                print(f"✅ TP2:    {'HIT ✅' if tp2_hit else 'Miss ❌'}")
+                print(f"✅ TP3:    {'HIT ✅' if tp3_hit else 'Miss ❌'}")
+                print(f"🔄 Trails: {trail_hits}")
+                print(f"💰 Daily:  ₹{daily_pnl_inr:+.0f}")
+                print(f"{'='*45}\n")
+                if final_pts <= 0:
                     sl_count       += 1
                     consecutive_sl += 1
+                else:
+                    consecutive_sl = 0
                 break
 
         else:
-            if cp < best_price:
-                best_price = cp
-            new_sl = round(best_price + trail_dist, 1)
-            if new_sl < current_sl:
-                old_sl     = current_sl
-                current_sl = new_sl
-                trail_hits += 1
-                cancel_all_orders(pid)
-                place_order(pid, close_side,
-                            "limit_order", size,
-                            current_sl, current_sl,
-                            "stop_loss_order")
-                print(f"📉 Trail#{trail_hits} "
-                      f"SL:{old_sl}→{current_sl}")
+
+            if not tp1_hit and cp <= tp1:
+                tp1_hit    = True
+                current_sl = entry - 10
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'✅'*8}")
+                print(f"TP1 HIT! +300pts R:R 1:1")
+                print(f"SL→Breakeven:{current_sl:.0f}")
+                print(f"{'✅'*8}\n")
+
+            elif tp1_hit and not tp2_hit \
+                    and cp <= tp2:
+                tp2_hit    = True
+                current_sl = entry - 300
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'🚀'*8}")
+                print(f"TP2 HIT! +600pts R:R 1:2")
+                print(f"SL→+300:{current_sl:.0f}")
+                print(f"{'🚀'*8}\n")
+
+            elif tp2_hit and not tp3_hit \
+                    and cp <= tp3:
+                tp3_hit    = True
+                current_sl = entry - 600
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                    place_order(pid, close_side,
+                                "limit_order", size,
+                                current_sl, current_sl,
+                                "stop_loss_order")
+                print(f"\n{'🔥'*8}")
+                print(f"TP3 HIT! +900pts R:R 1:3")
+                print(f"SL→+600:{current_sl:.0f}")
+                print(f"{'🔥'*8}\n")
+
+            elif tp3_hit:
+                if cp < best_price:
+                    best_price = cp
+                new_sl = round(
+                    best_price + trail_dist, 1)
+                if new_sl < current_sl:
+                    old_sl     = current_sl
+                    current_sl = new_sl
+                    trail_hits += 1
+                    if has_balance and pid:
+                        cancel_all_orders(pid)
+                        place_order(pid, close_side,
+                                    "limit_order", size,
+                                    current_sl, current_sl,
+                                    "stop_loss_order")
+                    print(f"🚀 Trail#{trail_hits} "
+                          f"SL:{old_sl:.0f}→"
+                          f"{current_sl:.0f}")
 
             if cp >= current_sl:
-                cancel_all_orders(pid)
-                final_pnl = round(
-                    (entry - current_sl)
-                    * size * INR_RATE, 1)
-                daily_pnl_inr += final_pnl
-                if profit_pts > 0:
-                    print(f"🎯 Profit! "
-                          f"+{profit_pts:.0f}pts "
-                          f"₹{final_pnl:+.0f}🔥")
-                    consecutive_sl = 0
-                else:
-                    print(f"🛑 SL! ₹{final_pnl:.0f}")
-                    sl_count       += 1
-                    consecutive_sl += 1
-                break
-
-    last_signal = "HOLD"
-    print(f"✅ Done! Trail:{trail_hits}x "
-          f"SL:{sl_count}/{MAX_SL} "
-          f"Daily:₹{daily_pnl_inr:+.0f}")
-
-def order(side, candle_data):
-    try:
-        pid = get_pid()
-        if not pid:
-            print("❌ Product नहीं")
-            return
-
-        cp = price()
-        if not cp:
-            print("❌ Price नहीं")
-            return
-
-        size = calc_size(cp)
-        if not size:
-            print("❌ Size नहीं")
-            return
-
-        close_side = "sell" if side == "buy" \
-                     else "buy"
-        res        = place_order(pid, side,
-                                 "market_order",
-                                 size)
-        print(f"📌 {side.upper()} "
-              f"Price:{cp} Size:{size}")
-
-        if not res.get("success"):
-            print(f"❌ Failed:{res.get('error')}")
-            return
-
-        entry = get_actual_entry(pid) or cp
-
-        # ✅ Swing based SL
-        recent_lows  = [float(c["low"])
-                        for c in candle_data[-20:]]
-        recent_highs = [float(c["high"])
-                        for c in candle_data[-20:]]
-
-        if side == "buy":
-            swing_sl = round(min(recent_lows) - 50, 1)
-            atr_sl   = round(entry - calc_atr(candle_data)
-                             * ATR_SL_MULT, 1)
-            sl       = max(swing_sl, atr_sl)
-        else:
-            swing_sl = round(max(recent_highs) + 50, 1)
-            atr_sl   = round(entry + calc_atr(candle_data)
-                             * ATR_SL_MULT, 1)
-            sl       = min(swing_sl, atr_sl)
-
-        # Min/Max check
-        sl_dist = abs(entry - sl)
-        if sl_dist < MIN_SL_PTS:
-            sl = round(entry - MIN_SL_PTS, 1) \
-                 if side == "buy" \
-                 else round(entry + MIN_SL_PTS, 1)
-        if sl_dist > MAX_SL_PTS:
-            sl = round(entry - MAX_SL_PTS, 1) \
-                 if side == "buy" \
-                 else round(entry + MAX_SL_PTS, 1)
-
-        sl_res = place_order(pid, close_side,
-                             "limit_order", size,
-                             sl, sl,
-                             "stop_loss_order")
-        print(f"🛡️ SL:{sl} "
-              f"Dist:{abs(entry-sl):.0f}pts "
-              f"OK:{sl_res.get('success')}")
-
-        trail_monitor(pid, side, entry, size, sl)
-
-    except Exception as e:
-        print(f"❌ Order:{e}")
-
-def run():
-    global sl_count, consecutive_sl
-    global daily_pnl_inr, today, last_signal
-
-    cooldown = 0
-
-    print("🚀 Sniper Bot v16.0")
-    print("📊 RSI Div + Trend Mode + Vol + Candle")
-    print(f"✅ Real: india.delta.exchange")
-    print(f"🛡️ Loss:₹{DAILY_LOSS_LIMIT} "
-          f"MaxSL:{MAX_SL} "
-          f"ConsSL:{MAX_CONSECUTIVE_SL}")
-
-    while True:
-
-        if date.today() != today:
-            today          = date.today()
-            sl_count       = 0
-            consecutive_sl = 0
-            daily_pnl_inr  = 0.0
-            last_signal    = "HOLD"
-            print("🌅 नया दिन! Reset.")
-
-        if daily_pnl_inr <= -DAILY_LOSS_LIMIT:
-            print(f"🛑 Loss! ₹{daily_pnl_inr:.0f} बंद")
-            time.sleep(3600)
-            continue
-
-        if sl_count >= MAX_SL:
-            print(f"🚫 {MAX_SL} SL! बंद")
-            time.sleep(3600)
-            continue
-
-        if consecutive_sl >= MAX_CONSECUTIVE_SL:
-            print("⛔ Consecutive SL! 2hr Rest")
-            consecutive_sl = 0
-            time.sleep(7200)
-            continue
-
-        if cooldown > 0:
-            print(f"⏳ Cooldown:{cooldown}")
-            cooldown -= 1
-            time.sleep(300)
-            continue
-
-        cp = price()
-        c  = candles()
-
-        if cp and c and len(c) >= 20:
-            s = find_divergence(c)
-            print(f"💰 Price:{cp} "
-                  f"Signal:{s} "
-                  f"SL:{sl_count}/{MAX_SL} "
-                  f"Daily:₹{daily_pnl_inr:+.0f}")
-
-            if s != "HOLD" and s != last_signal:
-                print(f"✅ {s} — Trade!")
-                order(s.lower(), c)
-                last_signal = s
-                cooldown    = 3
-            else:
-                print("⏳ Wait...")
-        else:
-            print(f"⚠️ Data:{len(c) if c else 0}")
-
-        time.sleep(300)
-
-run()               
-            
+                if has_balance and pid:
+                    cancel_all_orders(pid)
+                final_pts = round(
+                    entry - current_sl, 1)
+                daily_pnl_inr += final_pts * 0.001
+                rr_f = round(
+                    final_pts / sl_dist, 2) \
+                    if sl_dist > 0 else 0
+                print(f"\n{'='*45}")
+                print(f"{'🎯 PROFIT EXIT!' if final_pts > 0 else '🛑 SL HIT!'} {mode}")
+                print(f"{'='*45}")
+                print(f"📌 Side:   SELL")
+                print(f"💲 Entry:  {entry}")
+                print(f"💲 Exit:   {current_sl:.0f}")
+                print(f"📉 P&L:    {final_pts:+.0f} pts")
+                print(f"📊 R:R:    1:{rr_f:.1f}")
+                print(f"✅ TP1:    {'HIT ✅' if tp1_hit else 'Miss ❌'}")
+                print(f"✅ TP2:    {'HIT ✅' if tp2_hit else 'Miss ❌'}")
+    
+        
