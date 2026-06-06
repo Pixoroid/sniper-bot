@@ -5,36 +5,6 @@ KEY    = "afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"
 SECRET = "0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c"
 URL    = "https://api.india.delta.exchange"
 
-"""
-╔══════════════════════════════════════════════════════════╗
-║           SNIPER BOT v19.0 — MAX POINTS CAPTURE          ║
-╠══════════════════════════════════════════════════════════╣
-║  STRATEGY:                                               ║
-║  1. RSI Divergence (15m) + 1H Confirmation               ║
-║  2. Dynamic TP based on ATR (not fixed)                  ║
-║  3. ADX Trend Strength — strong trend में trail करो      ║
-║  4. Partial Exit — 25%+25%+50% में exit                  ║
-║                                                          ║
-║  RULES:                                                  ║
-║  • 15m Signal + 1H Confirm  → Full size trade            ║
-║  • 15m Signal only           → Half size trade           ║
-║  • ADX > 25 (Strong Trend)  → Trail SL ATR×3            ║
-║  • ADX < 20 (Weak Trend)    → TP3 पर full exit           ║
-║  • TP1 (ATR×1.5) → 25% exit, SL → Breakeven             ║
-║  • TP2 (ATR×3.0) → 25% exit, SL → TP1 lock              ║
-║  • TP3 (ATR×5.0) → 25% exit, बाकी trail                 ║
-║  • Balance नहीं  → TRACKED mode (data मिलेगा)           ║
-║  • Balance है    → REAL mode (actual trade)              ║
-╚══════════════════════════════════════════════════════════╝
-"""
-
-import requests, hmac, hashlib, time, json, os
-from datetime import date, datetime
-
-KEY    = os.environ.get("KEY")
-SECRET = os.environ.get("SECRET")
-URL    = "https://api.india.delta.exchange"
-
 # ══════════════════════════════════════════
 # CONFIG
 # ══════════════════════════════════════════
