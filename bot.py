@@ -38,10 +38,10 @@ def price():
             if x["symbol"] == "BTCUSD":
                 p = float(x.get("mark_price")
                           or x["close"])
-                print(f"💲 Price:{p}")
+                print(f" Price:{p}")
                 return p
     except Exception as e:
-        print(f"❌ Price:{e}")
+        print(f" Price:{e}")
         return None
 
 def get_balance():
@@ -53,7 +53,7 @@ def get_balance():
         data = r.json().get("result", [])
 
         for x in data:
-            print(f"💼 {x.get('asset_symbol')}:"
+            print(f" {x.get('asset_symbol')}:"
                   f"{x.get('available_balance')}")
 
         for x in data:
@@ -61,14 +61,14 @@ def get_balance():
             bal = float(x.get("available_balance", 0))
             if sym == "INR" and bal > 0:
                 usd = round(bal / INR_RATE, 4)
-                print(f"✅ INR:₹{bal:.0f} = ${usd}")
+                print(f" INR:₹{bal:.0f} = ${usd}")
                 return usd
 
         for x in data:
             sym = x.get("asset_symbol", "")
             bal = float(x.get("available_balance", 0))
             if sym in ["USD", "USDT", "USDC"] and bal > 0:
-                print(f"✅ {sym}:${bal}")
+                print(f" {sym}:${bal}")
                 return bal
 
         for x in data:
@@ -77,7 +77,7 @@ def get_balance():
             if sym == "BTC" and bal > 0:
                 cp  = price() or 60000
                 usd = round(bal * cp, 4)
-                print(f"✅ BTC:{bal} = ${usd}")
+                print(f" BTC:{bal} = ${usd}")
                 return usd
 
         if data:
@@ -85,14 +85,14 @@ def get_balance():
             return bal
 
     except Exception as e:
-        print(f"❌ Balance:{e}")
+        print(f" Balance:{e}")
     return 0.0
 
 def calc_size(btc_price, balance_usd):
     position_usd = balance_usd * LEVERAGE
     size         = round(position_usd / btc_price, 6)
     size         = max(size, 0.001)
-    print(f"💰 ${balance_usd:.4f}×{LEVERAGE}x→{size} BTC")
+    print(f" ${balance_usd:.4f}×{LEVERAGE}x→{size} BTC")
     return size
 
 def get_actual_entry(pid):
@@ -104,10 +104,10 @@ def get_actual_entry(pid):
         for x in r.json().get("result", []):
             if x.get("product_id") == pid:
                 ep = float(x.get("entry_price", 0))
-                print(f"✅ Entry:{ep}")
+                print(f" Entry:{ep}")
                 return ep
     except Exception as e:
-        print(f"❌ Entry:{e}")
+        print(f" Entry:{e}")
     return None
 
 def candles(resolution="15m", limit_hours=12):
@@ -124,10 +124,10 @@ def candles(resolution="15m", limit_hours=12):
         data  = r.json()["result"]
         if data:
             last_close = float(data[-1]["close"])
-            print(f"📊 {resolution} Candles:{len(data)} Last:{last_close}")
+            print(f" {resolution} Candles:{len(data)} Last:{last_close}")
         return data
     except Exception as e:
-        print(f"❌ Candles:{e}")
+        print(f" Candles:{e}")
         return None
 
 def calc_rsi(closes, n=14):
@@ -165,12 +165,12 @@ def volume_ok(candle_data, multiplier=1.2):
     avg  = sum(vols[-20:]) / 20
     cur  = vols[-1]
     ok   = cur > avg * multiplier
-    print(f"📊 Vol:{cur:.0f} Avg:{avg:.0f} OK:{ok}")
+    print(f" Vol:{cur:.0f} Avg:{avg:.0f} OK:{ok}")
     return ok
 
 def find_divergence(candle_data):
     if len(candle_data) < 20:
-        print("⚠️ कम candles!")
+        print(" कम candles!")
         return "HOLD"
 
     closes = [float(c["close"]) for c in candle_data]
@@ -213,7 +213,7 @@ def find_divergence(candle_data):
             if i < len(recent_rsi):
                 rsi_highs.append((i, recent_rsi[i]))
 
-    print(f"📊 RSI:{current_rsi:.1f} "
+    print(f" RSI:{current_rsi:.1f} "
           f"Lows:{len(price_lows)} "
           f"Highs:{len(price_highs)} "
           f"Vol:{vol_good} G:{green} R:{red}")
@@ -229,7 +229,7 @@ def find_divergence(candle_data):
                 and current_rsi < 45
                 and vol_good and green
                 and swing_size >= 500):
-            print(f"🟢 BULLISH DIV! Swing:{swing_size:.0f}")
+            print(f" BULLISH DIV! Swing:{swing_size:.0f}")
             return "BUY"
 
     if len(price_highs) >= 2 and len(rsi_highs) >= 2:
@@ -243,7 +243,7 @@ def find_divergence(candle_data):
                 and current_rsi > 55
                 and vol_good and red
                 and swing_size >= 500):
-            print(f"🔴 BEARISH DIV! Swing:{swing_size:.0f}")
+            print(f" BEARISH DIV! Swing:{swing_size:.0f}")
             return "SELL"
 
     curr = closes[-1]
@@ -251,11 +251,11 @@ def find_divergence(candle_data):
     move = (prev - curr) / prev * 100
 
     if move > 1.0 and current_rsi < 50 and red:
-        print(f"🔴 TREND SELL! Move:{move:.1f}%")
+        print(f" TREND SELL! Move:{move:.1f}%")
         return "SELL"
 
     if move < -1.0 and current_rsi > 50 and green:
-        print(f"🟢 TREND BUY! Move:{move:.1f}%")
+        print(f" TREND BUY! Move:{move:.1f}%")
         return "BUY"
 
     print(f"⏳ No Signal RSI:{current_rsi:.1f} Move:{move:.1f}%")
@@ -268,7 +268,7 @@ def get_pid():
             if x.get("symbol") == "BTCUSD":
                 return x.get("id")
     except Exception as e:
-        print(f"❌ PID:{e}")
+        print(f" PID:{e}")
     return None
 
 def cancel_all_orders(pid):
@@ -280,7 +280,7 @@ def cancel_all_orders(pid):
         h = hdrs("DELETE", "/v2/orders", b)
         requests.delete(URL + "/v2/orders",
                         headers=h, data=b, timeout=10)
-        print("🗑️ Cancelled")
+        print(" Cancelled")
     except Exception as e:
         print(f"Cancel:{e}")
 
@@ -325,18 +325,18 @@ def trade_monitor(pid, side, entry, sl,
     tp1_hit = False
     tp2_hit = False
     tp3_hit = False
-    mode    = "💰 REAL" if has_balance else "👁️ TRACKING"
+    mode    = " REAL" if has_balance else " TRACKING"
 
     print(f"\n{'='*45}")
     print(f"{mode} TRADE")
     print(f"{'='*45}")
-    print(f"📌 Side:   {side.upper()}")
-    print(f"💲 Entry:  {entry}")
-    print(f"🛡️  SL:     {current_sl} ({sl_dist:.0f} pts)")
-    print(f"🎯 TP1:    {tp1} (+300) R:R 1:1")
-    print(f"🎯 TP2:    {tp2} (+600) R:R 1:2")
-    print(f"🎯 TP3:    {tp3} (+900) R:R 1:3")
-    print(f"♾️  Trail:  ATR×{ATR_TRAIL_MULT}")
+    print(f" Side:   {side.upper()}")
+    print(f" Entry:  {entry}")
+    print(f"  SL:     {current_sl} ({sl_dist:.0f} pts)")
+    print(f" TP1:    {tp1} (+300) R:R 1:1")
+    print(f" TP2:    {tp2} (+600) R:R 1:2")
+    print(f" TP3:    {tp3} (+900) R:R 1:3")
+    print(f"  Trail:  ATR×{ATR_TRAIL_MULT}")
     print(f"{'='*45}\n")
 
     for _ in range(5000):
@@ -358,7 +358,7 @@ def trade_monitor(pid, side, entry, sl,
                      else round(entry - cp, 1)
         rr = round(profit_pts / sl_dist, 2) if sl_dist > 0 else 0
 
-        print(f"{'💰' if has_balance else '👁️'} "
+        print(f"{'' if has_balance else ''} "
               f"CP:{cp:.0f} | "
               f"P&L:{profit_pts:+.0f}pts | "
               f"R:R 1:{rr:.1f} | "
@@ -376,10 +376,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'✅'*8}")
+                print(f"\n{''*8}")
                 print(f"TP1 HIT! +300pts R:R 1:1")
                 print(f"SL→Breakeven:{current_sl:.0f}")
-                print(f"{'✅'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp1_hit and not tp2_hit and cp >= tp2:
                 tp2_hit    = True
@@ -390,10 +390,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'🚀'*8}")
+                print(f"\n{''*8}")
                 print(f"TP2 HIT! +600pts R:R 1:2")
                 print(f"SL→+300:{current_sl:.0f}")
-                print(f"{'🚀'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp2_hit and not tp3_hit and cp >= tp3:
                 tp3_hit    = True
@@ -404,10 +404,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'🔥'*8}")
+                print(f"\n{''*8}")
                 print(f"TP3 HIT! +900pts R:R 1:3")
                 print(f"SL→+600:{current_sl:.0f}")
-                print(f"{'🔥'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp3_hit:
                 if cp > best_price:
@@ -423,7 +423,7 @@ def trade_monitor(pid, side, entry, sl,
                                     "limit_order", size,
                                     current_sl, current_sl,
                                     "stop_loss_order")
-                    print(f"🚀 Trail#{trail_hits} "
+                    print(f" Trail#{trail_hits} "
                           f"SL:{old_sl:.0f}→{current_sl:.0f}")
 
             if cp <= current_sl:
@@ -433,18 +433,18 @@ def trade_monitor(pid, side, entry, sl,
                 daily_pnl_inr += final_pts * 0.001
                 rr_f = round(final_pts / sl_dist, 2) if sl_dist > 0 else 0
                 print(f"\n{'='*45}")
-                print(f"{'🎯 PROFIT EXIT!' if final_pts > 0 else '🛑 SL HIT!'} {mode}")
+                print(f"{' PROFIT EXIT!' if final_pts > 0 else ' SL HIT!'} {mode}")
                 print(f"{'='*45}")
-                print(f"📌 Side:   BUY")
-                print(f"💲 Entry:  {entry}")
-                print(f"💲 Exit:   {current_sl:.0f}")
-                print(f"📈 P&L:    {final_pts:+.0f} pts")
-                print(f"📊 R:R:    1:{rr_f:.1f}")
-                print(f"✅ TP1:    {'HIT ✅' if tp1_hit else 'Miss ❌'}")
-                print(f"✅ TP2:    {'HIT ✅' if tp2_hit else 'Miss ❌'}")
-                print(f"✅ TP3:    {'HIT ✅' if tp3_hit else 'Miss ❌'}")
-                print(f"🔄 Trails: {trail_hits}")
-                print(f"💰 Daily:  ₹{daily_pnl_inr:+.0f}")
+                print(f" Side:   BUY")
+                print(f" Entry:  {entry}")
+                print(f" Exit:   {current_sl:.0f}")
+                print(f" P&L:    {final_pts:+.0f} pts")
+                print(f" R:R:    1:{rr_f:.1f}")
+                print(f" TP1:    {'HIT ' if tp1_hit else 'Miss '}")
+                print(f" TP2:    {'HIT ' if tp2_hit else 'Miss '}")
+                print(f" TP3:    {'HIT ' if tp3_hit else 'Miss '}")
+                print(f" Trails: {trail_hits}")
+                print(f" Daily:  ₹{daily_pnl_inr:+.0f}")
                 print(f"{'='*45}\n")
                 if final_pts <= 0:
                     sl_count       += 1
@@ -464,10 +464,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'✅'*8}")
+                print(f"\n{''*8}")
                 print(f"TP1 HIT! +300pts R:R 1:1")
                 print(f"SL→Breakeven:{current_sl:.0f}")
-                print(f"{'✅'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp1_hit and not tp2_hit and cp <= tp2:
                 tp2_hit    = True
@@ -478,10 +478,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'🚀'*8}")
+                print(f"\n{''*8}")
                 print(f"TP2 HIT! +600pts R:R 1:2")
                 print(f"SL→+300:{current_sl:.0f}")
-                print(f"{'🚀'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp2_hit and not tp3_hit and cp <= tp3:
                 tp3_hit    = True
@@ -492,10 +492,10 @@ def trade_monitor(pid, side, entry, sl,
                                 "limit_order", size,
                                 current_sl, current_sl,
                                 "stop_loss_order")
-                print(f"\n{'🔥'*8}")
+                print(f"\n{''*8}")
                 print(f"TP3 HIT! +900pts R:R 1:3")
                 print(f"SL→+600:{current_sl:.0f}")
-                print(f"{'🔥'*8}\n")
+                print(f"{''*8}\n")
 
             elif tp3_hit:
                 if cp < best_price:
@@ -511,7 +511,7 @@ def trade_monitor(pid, side, entry, sl,
                                     "limit_order", size,
                                     current_sl, current_sl,
                                     "stop_loss_order")
-                    print(f"🚀 Trail#{trail_hits} "
+                    print(f" Trail#{trail_hits} "
                           f"SL:{old_sl:.0f}→{current_sl:.0f}")
 
             if cp >= current_sl:
@@ -521,18 +521,18 @@ def trade_monitor(pid, side, entry, sl,
                 daily_pnl_inr += final_pts * 0.001
                 rr_f = round(final_pts / sl_dist, 2) if sl_dist > 0 else 0
                 print(f"\n{'='*45}")
-                print(f"{'🎯 PROFIT EXIT!' if final_pts > 0 else '🛑 SL HIT!'} {mode}")
+                print(f"{' PROFIT EXIT!' if final_pts > 0 else ' SL HIT!'} {mode}")
                 print(f"{'='*45}")
-                print(f"📌 Side:   SELL")
-                print(f"💲 Entry:  {entry}")
-                print(f"💲 Exit:   {current_sl:.0f}")
-                print(f"📉 P&L:    {final_pts:+.0f} pts")
-                print(f"📊 R:R:    1:{rr_f:.1f}")
-                print(f"✅ TP1:    {'HIT ✅' if tp1_hit else 'Miss ❌'}")
-                print(f"✅ TP2:    {'HIT ✅' if tp2_hit else 'Miss ❌'}")
-                print(f"✅ TP3:    {'HIT ✅' if tp3_hit else 'Miss ❌'}")
-                print(f"🔄 Trails: {trail_hits}")
-                print(f"💰 Daily:  ₹{daily_pnl_inr:+.0f}")
+                print(f" Side:   SELL")
+                print(f" Entry:  {entry}")
+                print(f" Exit:   {current_sl:.0f}")
+                print(f" P&L:    {final_pts:+.0f} pts")
+                print(f" R:R:    1:{rr_f:.1f}")
+                print(f" TP1:    {'HIT ' if tp1_hit else 'Miss '}")
+                print(f" TP2:    {'HIT ' if tp2_hit else 'Miss '}")
+                print(f" TP3:    {'HIT ' if tp3_hit else 'Miss '}")
+                print(f" Trails: {trail_hits}")
+                print(f" Daily:  ₹{daily_pnl_inr:+.0f}")
                 print(f"{'='*45}\n")
                 if final_pts <= 0:
                     sl_count       += 1
@@ -545,15 +545,15 @@ def trade_monitor(pid, side, entry, sl,
 def main():
     global today, sl_count, consecutive_sl, daily_pnl_inr
 
-    print("🤖 Sniper Bot Starting...")
-    print(f"📅 Date: {date.today()}")
-    print(f"⚙️  Leverage: {LEVERAGE}x")
-    print(f"🛡️  Max SL: {MAX_SL} | Consecutive: {MAX_CONSECUTIVE_SL}")
-    print(f"📊 ATR SL Mult: {ATR_SL_MULT} | Trail Mult: {ATR_TRAIL_MULT}")
+    print(" Sniper Bot Starting...")
+    print(f" Date: {date.today()}")
+    print(f"  Leverage: {LEVERAGE}x")
+    print(f"  Max SL: {MAX_SL} | Consecutive: {MAX_CONSECUTIVE_SL}")
+    print(f" ATR SL Mult: {ATR_SL_MULT} | Trail Mult: {ATR_TRAIL_MULT}")
     print("="*45)
 
     pid = get_pid()
-    print(f"📌 Product ID: {pid}")
+    print(f" Product ID: {pid}")
 
     while True:
         try:
@@ -563,8 +563,13 @@ def main():
                 sl_count       = 0
                 consecutive_sl = 0
                 daily_pnl_inr  = 0.0
-                print(f"\n🔄 Daily Reset - {today}")
+                print(f"\n Daily Reset - {today}")
 
             # Risk checks
             if sl_count >= MAX_SL:
-                print(f"🛑
+                print(f" Max SL ({MAX_SL}) reached. 1hr wait...")
+                time.sleep(3600)
+                continue
+
+            if consecutive_sl >= MAX_CONSECUTIVE_SL:
+                
