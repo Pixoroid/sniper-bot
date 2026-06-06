@@ -5,7 +5,7 @@ KEY    = "afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"
 SECRET = "0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c"
 URL    = "https://api.india.delta.exchange"
      
-LEVERAGE           = 5
+ LEVERAGE           = 5
 INR_RATE           = 85
 MAX_SL             = 3
 MAX_CONSECUTIVE_SL = 2
@@ -148,13 +148,22 @@ def calc_atr(candle_data, n=14):
         a = t * k + a * (1 - k)
     return round(a, 1)
 
-# ✅ Stale check हटाया — Normal difference है
+def volume_ok(candle_data, multiplier=1.2):
+    vols = [float(c["volume"]) for c in candle_data]
+    avg  = sum(vols[-20:]) / 20
+    cur  = vols[-1]
+    ok   = cur > avg * multiplier
+    print(f"📊 Vol:{cur:.0f} Avg:{avg:.0f} OK:{ok}")
+    return ok
+
+# ✅ RSI Divergence + Trend Mode
 def find_divergence(candle_data):
     if len(candle_data) < 20:
         print("⚠️ कम candles!")
         return "HOLD"
 
     closes = [float(c["close"]) for c in candle_data]
+    opens  = [float(c["open"])  for c in candle_data]
     highs  = [float(c["high"])  for c in candle_data]
     lows   = [float(c["low"])   for c in candle_data]
 
@@ -166,6 +175,12 @@ def find_divergence(candle_data):
         return "HOLD"
 
     current_rsi  = rsi_values[-1]
+    vol_good     = volume_ok(candle_data)
+
+    # Candle color
+    green = closes[-1] > opens[-1]
+    red   = closes[-1] < opens[-1]
+
     lookback     = 20
     recent_highs = highs[-lookback:]
     recent_lows  = lows[-lookback:]
@@ -191,7 +206,9 @@ def find_divergence(candle_data):
 
     print(f"📊 RSI:{current_rsi:.1f} "
           f"Lows:{len(price_lows)} "
-          f"Highs:{len(price_highs)}")
+          f"Highs:{len(price_highs)} "
+          f"Vol:{vol_good} "
+          f"G:{green} R:{red}")
 
     # ✅ BULLISH DIVERGENCE — BUY
     if len(price_lows) >= 2 and len(rsi_lows) >= 2:
@@ -199,12 +216,20 @@ def find_divergence(candle_data):
         p_low2 = price_lows[-1][1]
         r_low1 = rsi_lows[-2][1]
         r_low2 = rsi_lows[-1][1]
+
+        # Swing size minimum 500 pts
+        swing_size = abs(p_low1 - p_low2)
+
         if (p_low2 < p_low1
                 and r_low2 > r_low1
-                and current_rsi < 45):
+                and current_rsi < 45
+                and vol_good
+                and green
+                and swing_size >= 500):
             print(f"🟢 BULLISH DIV! "
                   f"P:{p_low1:.0f}→{p_low2:.0f} "
-                  f"RSI:{r_low1:.1f}→{r_low2:.1f}")
+                  f"RSI:{r_low1:.1f}→{r_low2:.1f} "
+                  f"Swing:{swing_size:.0f}")
             return "BUY"
 
     # ✅ BEARISH DIVERGENCE — SELL
@@ -213,15 +238,41 @@ def find_divergence(candle_data):
         p_hi2 = price_highs[-1][1]
         r_hi1 = rsi_highs[-2][1]
         r_hi2 = rsi_highs[-1][1]
+
+        swing_size = abs(p_hi2 - p_hi1)
+
         if (p_hi2 > p_hi1
                 and r_hi2 < r_hi1
-                and current_rsi > 55):
+                and current_rsi > 55
+                and vol_good
+                and red
+                and swing_size >= 500):
             print(f"🔴 BEARISH DIV! "
                   f"P:{p_hi1:.0f}→{p_hi2:.0f} "
-                  f"RSI:{r_hi1:.1f}→{r_hi2:.1f}")
+                  f"RSI:{r_hi1:.1f}→{r_hi2:.1f} "
+                  f"Swing:{swing_size:.0f}")
             return "SELL"
 
-    print(f"⏳ No Div RSI:{current_rsi:.1f}")
+    # ✅ TREND MODE — Strong move पकड़ो
+    curr = closes[-1]
+    prev = closes[-5] if len(closes) >= 5 \
+           else closes[0]
+    move = (prev - curr) / prev * 100
+
+    if move > 1.0 and current_rsi < 50 and red:
+        print(f"🔴 TREND SELL! "
+              f"Move:{move:.1f}% "
+              f"RSI:{current_rsi:.1f}")
+        return "SELL"
+
+    if move < -1.0 and current_rsi > 50 and green:
+        print(f"🟢 TREND BUY! "
+              f"Move:{move:.1f}% "
+              f"RSI:{current_rsi:.1f}")
+        return "BUY"
+
+    print(f"⏳ No Signal RSI:{current_rsi:.1f} "
+          f"Move:{move:.1f}%")
     return "HOLD"
 
 def get_pid():
@@ -415,22 +466,40 @@ def order(side, candle_data):
 
         entry = get_actual_entry(pid) or cp
 
-        current_atr = calc_atr(candle_data)
-        sl_dist     = round(
-            current_atr * ATR_SL_MULT, 1)
-        sl_dist     = max(sl_dist, MIN_SL_PTS)
-        sl_dist     = min(sl_dist, MAX_SL_PTS)
+        # ✅ Swing based SL
+        recent_lows  = [float(c["low"])
+                        for c in candle_data[-20:]]
+        recent_highs = [float(c["high"])
+                        for c in candle_data[-20:]]
 
-        sl = round(entry - sl_dist, 1) \
-             if side == "buy" \
-             else round(entry + sl_dist, 1)
+        if side == "buy":
+            swing_sl = round(min(recent_lows) - 50, 1)
+            atr_sl   = round(entry - calc_atr(candle_data)
+                             * ATR_SL_MULT, 1)
+            sl       = max(swing_sl, atr_sl)
+        else:
+            swing_sl = round(max(recent_highs) + 50, 1)
+            atr_sl   = round(entry + calc_atr(candle_data)
+                             * ATR_SL_MULT, 1)
+            sl       = min(swing_sl, atr_sl)
+
+        # Min/Max check
+        sl_dist = abs(entry - sl)
+        if sl_dist < MIN_SL_PTS:
+            sl = round(entry - MIN_SL_PTS, 1) \
+                 if side == "buy" \
+                 else round(entry + MIN_SL_PTS, 1)
+        if sl_dist > MAX_SL_PTS:
+            sl = round(entry - MAX_SL_PTS, 1) \
+                 if side == "buy" \
+                 else round(entry + MAX_SL_PTS, 1)
 
         sl_res = place_order(pid, close_side,
                              "limit_order", size,
                              sl, sl,
                              "stop_loss_order")
         print(f"🛡️ SL:{sl} "
-              f"Dist:{sl_dist}pts "
+              f"Dist:{abs(entry-sl):.0f}pts "
               f"OK:{sl_res.get('success')}")
 
         trail_monitor(pid, side, entry, size, sl)
@@ -444,8 +513,8 @@ def run():
 
     cooldown = 0
 
-    print("🚀 Sniper Bot v15.2")
-    print("📊 RSI Divergence | ATR Trail | No TP")
+    print("🚀 Sniper Bot v16.0")
+    print("📊 RSI Div + Trend Mode + Vol + Candle")
     print(f"✅ Real: india.delta.exchange")
     print(f"🛡️ Loss:₹{DAILY_LOSS_LIMIT} "
           f"MaxSL:{MAX_SL} "
@@ -505,5 +574,4 @@ def run():
 
         time.sleep(300)
 
-run()
-                            
+run()       
