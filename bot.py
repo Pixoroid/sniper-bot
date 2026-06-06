@@ -573,5 +573,4 @@ def trade_monitor(pid, side, entry, sl,
 
                 if final_pts <= 0:
                     sl_count       += 1
-                                                                f"SL:{old_sl:.0f}→"
-                          
+              
