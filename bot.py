@@ -4,8 +4,8 @@ from datetime import date, datetime, timezone, timedelta
 KEY    = "afr1UynKRx9xZiwOLlioGEqQAP4qTxÀ"
 SECRET = "0EIc661e8iXKOgi3EqLbZCKVK82BMXSaBsCg8JiJT8VwaLOa90utgEFKA85c"
 URL    = "https://api.india.delta.exchange"
-     
- LEVERAGE           = 5
+
+LEVERAGE           = 5
 INR_RATE           = 85
 MAX_SL             = 3
 MAX_CONSECUTIVE_SL = 2
@@ -574,4 +574,5 @@ def run():
 
         time.sleep(300)
 
-run()       
+run()                      
+        
