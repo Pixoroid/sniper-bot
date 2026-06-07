@@ -572,5 +572,4 @@ def trade_monitor(pid, side, entry, sl, size, has_balance):
 # ══════════════════════════════════════════════════
 def main():
     global sl_count, consecutive_sl, daily_pnl_inr
-                                                cancel_all_orders(pid)
-                    
+                                                              
